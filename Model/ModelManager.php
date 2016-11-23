@@ -148,7 +148,7 @@ class ModelManager implements ModelManagerInterface, LockInterface
     /**
      * {@inheritdoc}
      */
-    /*public function create($object)
+    public function create($object)
     {
         try {
             $entityManager = $this->getEntityManager($object);
@@ -159,12 +159,12 @@ class ModelManager implements ModelManagerInterface, LockInterface
         } catch (DBALException $e) {
             throw new ModelManagerException(sprintf('Failed to create object: %s', ClassUtils::getClass($object)), $e->getCode(), $e);
         }
-    }*/
+    }
 
     /**
      * {@inheritdoc}
      */
-    /*public function update($object)
+    public function update($object)
     {
         try {
             $entityManager = $this->getEntityManager($object);
@@ -175,7 +175,7 @@ class ModelManager implements ModelManagerInterface, LockInterface
         } catch (DBALException $e) {
             throw new ModelManagerException(sprintf('Failed to update object: %s', ClassUtils::getClass($object)), $e->getCode(), $e);
         }
-    }*/
+    }
 
     /**
      * {@inheritdoc}
@@ -261,7 +261,7 @@ class ModelManager implements ModelManagerInterface, LockInterface
      *
      * @return EntityManager
      */
-    /*public function getEntityManager($class)
+    public function getEntityManager($class)
     {
         if (is_object($class)) {
             $class = get_class($class);
@@ -278,7 +278,7 @@ class ModelManager implements ModelManagerInterface, LockInterface
         }
 
         return $this->cache[$class];
-    }*/
+    }
 
     /**
      * {@inheritdoc}
@@ -301,12 +301,12 @@ class ModelManager implements ModelManagerInterface, LockInterface
     /**
      * {@inheritdoc}
      */
-    /*public function createQuery($class, $alias = 'o')
+    public function createQuery($class, $alias = 'o')
     {
         $repository = $this->getEntityManager($class)->getRepository($class);
 
         return new ProxyQuery($repository->createQueryBuilder($alias));
-    }*/
+    }
 
     /**
      * {@inheritdoc}
@@ -654,171 +654,5 @@ class ModelManager implements ModelManagerInterface, LockInterface
     public function collectionRemoveElement(&$collection, &$element)
     {
         return $collection->removeElement($element);
-    }
-
-    /*****************************************
-     *********** DEL MODEL MANAGER ***********
-     *****************************************/
-
-    /**
-     * @var $emName stores the preferred entity manager name
-     */
-    protected $emName;
-
-    /**
-     * {@inheritdoc}
-     */    
-    public function createQuery($class, $alias = 'o') {
-        $repository = $this->getEntityManager($class)
-                           ->getRepository($class, $this->emName);
-
-        return new ProxyQuery($repository->createQueryBuilder($alias));
-    }
-    
-    /**
-     * {@inheritdoc}
-     */
-    public function getEntityManager($class) {
-        if (is_object($class)) {
-            $class = get_class($class);
-        }
-        
-        if (isset($this->cache[$class]) === false) {
-            if (isset($this->emName) === true) {
-                $this->cache[$class] = $this->registry->getEntityManager($this->emName);
-            } else {
-                $em = $this->registry->getManagerForClass($class);
-                if (!$em) {
-                    throw new \RuntimeException(sprintf('No entity manager defined for class %s', $class));
-                }
-                $this->cache[$class] = $em;
-            }
-        }
-
-        return $this->cache[$class];
-    }
-
-    public function createMulti($object,$entityManager) {
-        $metadata = $entityManager->getClassMetaData(get_class($object));
-        $metadata->setIdGeneratorType(\Doctrine\ORM\Mapping\ClassMetadata::GENERATOR_TYPE_NONE);
-        $metadata->setIdGenerator(new \Doctrine\ORM\Id\AssignedGenerator());
-        $entityManager->persist($object);
-        $entityManager->flush();
-    }
-   
-    /**
-     * {@inheritdoc}
-     */
-    public function create($object)
-    {
-        //$class = get_class($object);
-        try {
-            $entityManager = $this->getEntityManager($object);
-            $entityManager->persist($object);
-            $entityManager->flush();
-            $this->persistAssociations($object);
-        } catch (PDOException $e) {
-            throw new ModelManagerException('', 0, $e);
-        }
-    }
-    
-    /**
-     * {@inheritdoc}
-     */
-    public function update($object)
-    {
-        $class = get_class($object);
-        switch($class) {
-            case 'Pequiven\SEIPBundle\Entity\CEI\Plant':
-            case 'Pequiven\IndicatorBundle\Entity\Indicator':
-                try {
-                    $entityManager = $this->getEntityManager($object);
-                    $originaObjects = $entityManager->getRepository(get_class($object))->findBy(array(
-                        'parent' => $object,
-                    ));
-                    
-                    $childrensObject = $object->getChildrens();
-                    foreach ($originaObjects as $indicatorChild) {
-                        $find = false;
-                        foreach ($childrensObject as $child) {
-                            if($child === $indicatorChild){
-                                $find = true;
-                                break;
-                            }
-                        }
-                        if($find === false){
-                            $indicatorChild->setParent(null);
-                            $entityManager->persist($indicatorChild);
-                        }
-                    }
-
-                    $entityManager->persist($object);
-                    $entityManager->flush();
-                    $this->persistAssociations($object);
-                } catch (PDOException $e) {
-                    throw new ModelManagerException('', 0, $e);
-                }
-                break;
-
-            default:
-                try {
-                    $entityManager = $this->getEntityManager($object);
-                    $entityManager->persist($object);
-                    $entityManager->flush();
-                } catch (\PDOException $e) {
-                    throw new ModelManagerException(sprintf('Failed to update object: %s', ClassUtils::getClass($object)), $e->getCode(), $e);
-                } catch (DBALException $e) {
-                    throw new ModelManagerException(sprintf('Failed to update object: %s', ClassUtils::getClass($object)), $e->getCode(), $e);
-                }
-                break;
-        }
-    }
-
-    /**
-     * Persist owning side associations
-     */
-    public function persistAssociations($object)
-    {       
-        $associations = $this
-            ->getMetadata(get_class($object))
-            ->getAssociationMappings();
-        
-        if ($associations) {
-            $entityManager = $this->getEntityManager($object);
-
-            foreach ($associations as $field => $mapping) {
-                if ($mapping['isOwningSide'] == false) {
-                    if($mapping['fieldName'] != 'childrens'){
-                        continue;
-                    }
-                    
-                    if ($owningObjects = $object->{'get' . ucfirst($mapping['fieldName'])}()) {
-                        foreach ($owningObjects as $owningObject) {
-                            $owningObject->{'set' . ucfirst($mapping['mappedBy']) }($object);
-                            $entityManager->persist($owningObject);
-                        }
-                        $entityManager->flush();
-                    }
-                }
-            }
-        }
-    }
-    
-    /**
-     * Set preferred entity manager name to be used in ModelManager
-     *
-     * @param string $name
-     */
-    public function setEntityManagerName($name){
-        $this->emName = $name;
-    }
-    
-    /**
-     * Get preferred entity manager name to be used in ModelManager
-     *
-     * @return string $name
-     */
-    public function getEntityManagerName(){
-        return $this->emName;
     }
 }
